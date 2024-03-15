@@ -1,34 +1,53 @@
+import React, {
+  FunctionComponent,
+  useState,
+  useEffect,
+  FormEvent,
+} from "react";
 import {
-  Button,
-  CellButton,
-  FormItem,
-  FormStatus,
-  Group,
-  Input,
   Panel,
   PanelHeader,
+  Group,
+  FormItem,
+  Input,
+  Button,
+  CellButton,
+  FormStatus,
 } from "@vkontakte/vkui";
-import {
-  ChangeEvent,
-  FormEvent,
-  FunctionComponent,
-  useEffect,
-  useState,
-} from "react";
+import AgeApi from "../api/ageApi";
 
-const GetAge: FunctionComponent<{
+const GetAgeUI: FunctionComponent<{
   id: string;
   setActivePanel: React.Dispatch<React.SetStateAction<string>>;
 }> = ({ setActivePanel, id }) => {
-  const [Name, setName] = useState<string>("");
+  const [name, setName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [lastRequestedName, setLastRequestedName] = useState<string>("");
   const [age, setAge] = useState<number | null>(null);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [abortController, setAbortController] =
+    useState<AbortController | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const changeHandle = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const inputName = event.target.value;
+    setName(inputName);
+    setError(null);
+    setIsLoading(true);
+
+    if (!/^[a-zA-Zа-яА-Я]*$/.test(inputName)) {
+      setError("Пожалуйста, введите только буквы");
+      setIsLoading(false);
+    }
+
+    if (/\d/.test(inputName)) {
+      setError("Пожалуйста, не используйте цифры");
+      setIsLoading(false);
+    }
+  };
 
   const submitHandle = async (event: FormEvent) => {
     event.preventDefault();
+    if (error) return;
     setError(null);
 
     if (abortController) {
@@ -39,35 +58,23 @@ const GetAge: FunctionComponent<{
     setAbortController(controller);
 
     try {
-      if (Name === lastRequestedName) {
+      if (name === lastRequestedName || /\d/.test(name)) {
         return;
-      }
-
-      if (!/^[a-zA-Zа-яА-Я]+$/.test(Name)) {
-        throw Error("Пожалуйста, введите текст");
       }
 
       setIsLoading(true);
 
-      const response = await fetch(`https://api.agify.io/?name=${Name}`, {
-        signal: controller.signal,
-      });
-      const data = await response.json();
-      setLastRequestedName(Name);
-      setAge(data.age);
+      const ageResult = await AgeApi.getAge(name, controller.signal);
+      setLastRequestedName(name);
+      setAge(ageResult);
     } catch (error: unknown) {
       if (error instanceof Error) {
-        setError(`${error.message}`);
+        console.error(error.message);
       }
+    } finally {
+      setAbortController(null);
+      setIsLoading(false);
     }
-
-    setAbortController(null);
-    setIsLoading(false);
-  };
-
-  const changeHandle = (event: ChangeEvent<HTMLInputElement>) => {
-    setIsLoading(true);
-    setName(event.target.value);
   };
 
   useEffect(() => {
@@ -78,7 +85,7 @@ const GetAge: FunctionComponent<{
     return () => {
       clearTimeout(timerId);
     };
-  }, [Name]);
+  }, [submitHandle]);
 
   return (
     <Panel id={id}>
@@ -88,30 +95,34 @@ const GetAge: FunctionComponent<{
           <FormItem>
             <Input
               onChange={changeHandle}
-              value={Name}
+              value={name}
               style={{ resize: "none" }}
               name="GetAge"
               id="GetAge"
             ></Input>
           </FormItem>
-          {!isLoading && Name && !error && (
+          {!isLoading && name && !error && (
             <FormStatus
               mode="default"
               style={{ textAlign: "center" }}
-            >{`Возраст ${Name} составляет: ${age ? age : "такой человек не нейден"}`}</FormStatus>
+            >{`Возраст ${name} составляет: ${
+              age ? age : "такой человек не найден"
+            }`}</FormStatus>
           )}
           {error && <FormStatus mode="error">{error}</FormStatus>}
           <FormItem>
-            <Button type ="submit">Узнать возраст</Button>
+            <Button type="submit" disabled={!name || !!error}>
+              Узнать возраст
+            </Button>
           </FormItem>
         </form>
       </Group>
 
       <CellButton onClick={() => setActivePanel("facts")}>
-        Получить случайный факт о котах
+        Узнать случайный факт о котах
       </CellButton>
     </Panel>
   );
 };
 
-export default GetAge;
+export default GetAgeUI;
